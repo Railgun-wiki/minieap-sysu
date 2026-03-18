@@ -1,14 +1,12 @@
-#### Choose/Add your modules here ####
+# Choose/add your modules here
 PLUGIN_MODULES := \
 	packet_plugin_printer \
 	packet_plugin_rjv3
 
 # Linux
 PLUGIN_MODULES += if_impl_sockraw
-
 # macOS / BSD
 # PLUGIN_MODULES += if_impl_bpf
-
 # Other OS
 # PLUGIN_MODULES += if_impl_libpcap
 
@@ -25,12 +23,12 @@ STATIC_BUILD  := false
 # Affects dynamic linking
 LIBICONV_STANDALONE := false
 
-CUSTOM_CFLAGS :=
-CUSTOM_LDFLAGS :=
-CUSTOM_LIBS :=
+# CUSTOM_CFLAGS :=
+# CUSTOM_LDFLAGS :=
+# CUSTOM_LIBS :=
 
 # Example for cross-compiling
-CC := aarch64-openwrt-linux-musl-gcc-12.3.0
+CC := gcc
 # ENABLE_ICONV := true
 # CUSTOM_CFLAGS += -I/home/me/libiconv-1.14/include
 # CUSTOM_LIBS += /home/me/arm/libiconv.a
