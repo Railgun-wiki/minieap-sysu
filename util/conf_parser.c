@@ -79,7 +79,7 @@ RESULT conf_parser_parse_now() {
 
 	FILE* fp = fopen(g_conf_file, "r");
 	if (fp == NULL) {
-		PR_ERRNO("无法打开配置文件");
+		PR_WARN("无法打开配置文件");
 		return FAILURE;
 	}
 

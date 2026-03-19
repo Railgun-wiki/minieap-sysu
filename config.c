@@ -39,6 +39,7 @@ static void configure_log_by_daemon_type(DAEMON_TYPE daemon_type) {
 
 void load_default_params() {
 #define PCFG g_prog_config
+    PCFG.ifname = strdup(DEFAULT_IFNAME);
     PCFG.pidfile = strdup(DEFAULT_PIDFILE);
     PCFG.logfile = strdup(DEFAULT_LOGFILE);
     PCFG.restart_on_logoff = DEFAULT_RESTART_ON_LOGOFF;
@@ -90,19 +91,19 @@ static void print_cmdline_help() {
         "\t--save, -w\t保存本次认证所用参数\n"
         "\t--username, -u <...>\t用户名\n"
         "\t--password, -p <...>\t密码\n"
-        "\t--nic, -n <...>\t\t要使用的网络界面名\n"
+        "\t--nic, -n <...>\t\t要使用的网络接口名 [默认" DEFAULT_IFNAME "]\n"
         "\t--stage-timeout, -t <num>\t单个认证阶段的超时时间 [默认" STR(DEFAULT_STAGE_TIMEOUT) "]\n"
         "\t--wait-after-fail, -r <num>\t认证失败后重新认证前的等待时间（但当服务器要求重新认证时将直接开始认证）[默认" STR(DEFAULT_WAIT_AFTER_FAIL_SECS) "]\n"
         "\t--max-fail, -l <num>\t最大允许认证失败次数 [默认" STR(DEFAULT_MAX_FAILURES) "]\n"
         "\t--no-auto-reauth, -x\t认证掉线后不允许自动重连 [默认" STR(DEFAULT_RESTART_ON_LOGOFF) "]\n"
-        "\t--daemonize, -b <0-3>\t后台运行方式： [默认0]\n"
+        "\t--daemonize, -b <0-3>\t后台运行方式： [默认 0]\n"
             "\t\t\t\t0 = 不后台\n"
             "\t\t\t\t1 = 后台运行，关闭输出\n"
             "\t\t\t\t2 = 后台运行，输出到当前控制台\n"
             "\t\t\t\t3 = 后台运行，输出到日志文件\n"
         "\t--proxy-lan-iface, -z <...>\t代理认证时的 LAN 网络界面名 [默认无]\n"
-        "\t--auth-round, -j <num>\t需要认证的次数 [默认1]\n"
-        "\t--max-retries <num>\t最大超时重试的次数 [默认3]\n"
+        "\t--auth-round, -j <num>\t需要认证的次数 [默认 1]\n"
+        "\t--max-retries <num>\t最大超时重试的次数 [默认 3]\n"
         "\t--pid-file <...>\tPID 文件路径，设为none可禁用 [默认" DEFAULT_PIDFILE "]\n"
         "\t--conf-file <...>\t配置文件路径 [默认" DEFAULT_CONFFILE "]\n"
         "\t--if-impl <...>\t\t选择此网络操作模块，仅允许选择一次 [默认为第一个可用的模块]\n"

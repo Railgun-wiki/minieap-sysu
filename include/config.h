@@ -59,7 +59,7 @@ typedef struct _prog_config {
      * WAN interface when proxy mode on.
      */
     char* ifname;
-    //#define DEFAULT_IFNAME NULL
+    #define DEFAULT_IFNAME "wan"
 
     /*
      * PID file, avoid multiple instances.

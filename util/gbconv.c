@@ -3081,7 +3081,7 @@ static uint16_t table[] = {
 static uint16_t gbk_to_index(char byte1, char byte2)
 {
     uint16_t result = 0;
-    if ((byte2 & 0xC0) == 0x10)
+    if ((byte2 & 0xC0) == 0x40)
     {
         /* 1xxxxxxx 01xxxxxx -> 001xxxxx xxxxxxxx */
         result |= byte2 & 0x3F;

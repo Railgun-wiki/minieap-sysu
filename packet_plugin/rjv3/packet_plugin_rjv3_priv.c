@@ -127,7 +127,19 @@ static void rjv3_set_secondary_dns(char* dns_ascii_buf, char* fake_dns) {
     return;
 }
 
-static void rjv3_set_hdd_serial(uint8_t* serial_buf, char* fake_serial) {
+/* Helper function to generate serial number from MAC address */
+static void generate_mac_based_serial(uint8_t* serial_buf, uint8_t* mac) {
+    if (mac != NULL) {
+        snprintf((char*)serial_buf, RJV3_SIZE_HDD_SER,
+                "MINIEAP%02X%02X%02X%02X%02X%02X",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        PR_DBG("无法获取硬盘序列号，使用基于 MAC 的序列号: %s", (char*)serial_buf);
+    } else {
+        PR_ERR("无法获取硬盘序列号和 MAC 地址");
+    }
+}
+
+static void rjv3_set_hdd_serial(uint8_t* serial_buf, char* fake_serial, uint8_t* fallback_mac) {
     if (fake_serial != NULL) {
         memmove(serial_buf, fake_serial, strnlen(fake_serial, MAX_PROP_LEN));
         return;
@@ -140,7 +152,7 @@ static void rjv3_set_hdd_serial(uint8_t* serial_buf, char* fake_serial) {
     char* _ret;
 
     if (_fp == NULL) {
-        goto info_err;
+        goto fallback;
     }
 
     /* Find the root device */
@@ -160,7 +172,7 @@ static void rjv3_set_hdd_serial(uint8_t* serial_buf, char* fake_serial) {
         int devfd;
         struct hd_driveid hd;
         if ((devfd = open(_root_dev, O_RDONLY|O_NONBLOCK)) < 0) {
-            goto info_err;
+            goto fallback;
         }
 
         if (!ioctl(devfd, HDIO_GET_IDENTITY, &hd)) {
@@ -170,16 +182,20 @@ static void rjv3_set_hdd_serial(uint8_t* serial_buf, char* fake_serial) {
             memmove(serial_buf, hd.serial_no, strlen((char*)hd.serial_no));
             goto close_return;
         } else {
-            goto info_err;
+            goto fallback;
         }
     }
 
-info_err:
-    PR_ERRNO("无法从 /etc/mtab 获取根分区挂载设备信息，请使用 --fake-serial 选项手动指定硬盘序列号");
+fallback:
+    generate_mac_based_serial(serial_buf, fallback_mac);
+
 close_return:
     if (_fp != NULL) fclose(_fp);
     if (_root_dev) free(_root_dev);
-#endif // TODO macOS ioreg?
+#else
+    /* Non-Linux platform: Generate serial number using MAC address */
+    generate_mac_based_serial(serial_buf, fallback_mac);
+#endif
     return;
 }
 
@@ -297,7 +313,7 @@ static int rjv3_append_common_fields(PACKET_PLUGIN* this, LIST_ELEMENT** list, i
 
     rjv3_set_service_name(_service, PRIV->service_name);
 
-    rjv3_set_hdd_serial(_hdd_ser, PRIV->fake_serial);
+    rjv3_set_hdd_serial(_hdd_ser, PRIV->fake_serial, _local_mac);
 
 #define CHK_ADD(x) \
     _this_len = x; \

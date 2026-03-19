@@ -1,23 +1,48 @@
 # MiniEAP-SYSU
 
-[minieap](https://github.com/updateing/minieap) 的 SYSU 适配版本。
+[updateing/minieap](https://github.com/updateing/minieap) 的 SYSU 适配版本。
 
 ## Build
 
 > 如果目的是在 OpenWrt 上使用 minieap 认证校园网，建议移步 [openwrt-minieap-sysu](https://github.com/undefined443/openwrt-minieap-sysu)（minieap 主程序）和 [luci-app-minieap](https://github.com/kongfl888/luci-app-minieap)（minieap Web 管理插件），它们对 OpenWrt 提供了专门适配。
 
-1. 下载你路由器型号的 Toolchain：
+1. 根据路由器型号（model）查找对应的 CPU 平台：[OpenWrt Table of Hardware](https://toh.openwrt.org/)
 
-   [ImmortalWrt Firmware Selector](https://firmware-selector.immortalwrt.org/)
+2. 根据 CPU 平台选择对应的 SDK 镜像：
 
-   [OpenWrt Firmware Selector](https://firmware-selector.openwrt.org/)
+   - [openwrt/sdk](https://hub.docker.com/r/openwrt/sdk/tags)
+   - [immortalwrt/sdk](https://hub.docker.com/r/immortalwrt/sdk/tags)
 
-2. 克隆源码。
-3. 修改 `config.mk`，将其中的 `CC` 修改为 Toolchain 中 GCC 编译器的路径。
-4. 使用 `make` 编译。
+   ```sh
+   IMAGE="docker.io/immortalwrt/sdk:mediatek-filogic-24.10-SNAPSHOT"
+   ```
+
+3. 配置 CC 路径：
+
+   ```sh
+   TOOLCHAIN=$(docker run --rm $IMAGE sh -c 'realpath $(find staging_dir -name "*openwrt-linux-gcc")')
+   sed -i "s|gcc|$TOOLCHAIN|" config.mk
+   ```
+
+3. 构建：
+
+   ```sh
+   docker run -v "$(pwd):/minieap" -w /minieap -u root --rm $IMAGE make
+   ```
 
 ## Usage
 
 ```sh
-./minieap -u <username> -p <password> -n <nic>
+./minieap -u <username> -p <password>
 ```
+
+## Develop
+
+1. 修改 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) 中的 `image` 字段为适合你的 SDK 镜像：
+
+   ```diff
+   -"image": "docker.io/immortalwrt/sdk:mediatek-filogic",
+   +"image": "docker.io/immortalwrt/sdk:mediatek-filogic-24.10-SNAPSHOT",
+   ```
+
+2. 在 VS Code 中使用 Dev Containers 插件打开本项目。

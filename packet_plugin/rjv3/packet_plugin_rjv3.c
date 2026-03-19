@@ -253,17 +253,17 @@ static RESULT rjv3_process_success(struct _packet_plugin* this, ETH_EAP_FRAME* f
         system(PRIV->dhcp_script);
     }
 
-    // if (IS_FAIL(rjv3_process_result_prop(frame))) {
-    //     return FAILURE;
-    // }
+    if (IS_FAIL(rjv3_process_result_prop(frame))) {
+        return FAILURE;
+    }
 
-    // PR_INFO("正定时发送 Keep-Alive 报文以保持在线……");
-    // schedule_alarm(1, rjv3_send_keepalive_timed, this);
+    PR_INFO("正定时发送 Keep-Alive 报文以保持在线……");
+    schedule_alarm(1, rjv3_send_keepalive_timed, this);
     return SUCCESS;
 }
 
 static RESULT rjv3_process_failure(PACKET_PLUGIN* this, ETH_EAP_FRAME* frame) {
-    // rjv3_process_result_prop(frame);
+    rjv3_process_result_prop(frame);
     rjv3_reset_state(this);
     return SUCCESS;
 }
@@ -347,8 +347,9 @@ void rjv3_save_config(struct _packet_plugin* this) {
 
 static void packet_plugin_rjv3_print_banner() {
     PR_INFO("\nRJv3 for MiniEAP " VERSION "\n"
-            "V3 校验算法来自 hyrathb@GitHub\n"
-            "Hamster Tian, 2016\n\n");
+            "V3 校验算法来自 @hyrathb\n"
+            "Original: Hamster Tian, 2016\n"
+            "SYSU adaptations: Xiao Li, 2025\n\n");
 }
 
 PACKET_PLUGIN* packet_plugin_rjv3_new() {
@@ -368,7 +369,7 @@ PACKET_PLUGIN* packet_plugin_rjv3_new() {
     memset(this->priv, 0, sizeof(rjv3_priv));
 
     this->name = "rjv3";
-    this->description = "来自 hyrathb@GitHub 的 Ruijie V3 验证算法";
+    this->description = "锐捷 V3/V4 认证算法（来自 @hyrathb 的 MentoHUST）";
     this->version = PACKET_PLUGIN_RJV3_VER_STR;
     this->destroy = rjv3_destroy;
     this->process_cmdline_opts = rjv3_process_cmdline_opts;

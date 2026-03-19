@@ -1,6 +1,6 @@
 {
   "name": "ImmortalWrt SDK",
-  "image": "docker.io/immortalwrt/sdk:ramips-mt7621-24.10-SNAPSHOT",
+  "image": "docker.io/immortalwrt/sdk:mediatek-filogic",
   "workspaceFolder": "/home/build/minieap",
   "workspaceMount": "source=${localWorkspaceFolder},target=/home/build/minieap,type=bind",
   "overrideCommand": true,
