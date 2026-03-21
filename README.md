@@ -35,14 +35,3 @@
 ```sh
 ./minieap -u <username> -p <password>
 ```
-
-## Develop
-
-1. 修改 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) 中的 `image` 字段为适合你的 SDK 镜像：
-
-   ```diff
-   -"image": "docker.io/immortalwrt/sdk:mediatek-filogic",
-   +"image": "docker.io/immortalwrt/sdk:mediatek-filogic-24.10-SNAPSHOT",
-   ```
-
-2. 在 VS Code 中使用 Dev Containers 插件打开本项目。

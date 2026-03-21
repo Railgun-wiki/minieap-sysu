@@ -300,7 +300,7 @@ static void disable_state_watchdog() {
  */
 static RESULT trans_to_preparing(ETH_EAP_FRAME* frame) {
     PR_INFO("========================");
-    PR_INFO("MiniEAP " VERSION "已启动");
+    PR_INFO("MiniEAP " VERSION " 已启动");
     IF_IMPL* _if_impl = get_if_impl();
     RESULT ret = switch_to_state(EAP_STATE_START_SENT, frame);
     _if_impl->start_capture(_if_impl); // Blocking...
