@@ -35,7 +35,7 @@ static int init_program_config(int argc, char* argv[]) {
     }
 
     cfg = get_program_config();
-    if (IS_FAIL(parse_config_file(cfg->conffile))) {
+    if (IS_FAIL(parse_config_file(cfg->conffile)) && errno != ENOENT) {
         PR_WARN("配置文件解析出错，请注意命令行参数是否完整");
     }
     if (IS_FAIL(parse_cmdline_opts(argc, argv))) {

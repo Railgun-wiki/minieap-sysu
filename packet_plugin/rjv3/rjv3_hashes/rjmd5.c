@@ -205,7 +205,7 @@ void rhash_md5_update(md5_ctx *ctx, const unsigned char* msg, size_t size)
  * @param ctx the algorithm context containing current hashing state
  * @param result calculated hash in binary form
  */
-void rhash_md5_final(md5_ctx *ctx, unsigned char* result)
+void rhash_md5_final(md5_ctx *ctx, unsigned char result[16])
 {
 	unsigned index = ((unsigned)ctx->length & 63) >> 2;
 	unsigned shift = ((unsigned)ctx->length & 3) * 8;

@@ -133,8 +133,10 @@ static void generate_mac_based_serial(uint8_t* serial_buf, uint8_t* mac) {
         snprintf((char*)serial_buf, RJV3_SIZE_HDD_SER,
                 "MINIEAP%02X%02X%02X%02X%02X%02X",
                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        PR_DBG("使用 MAC 派生硬盘序列号: %s", (char*)serial_buf);
     } else {
-        PR_ERR("无法获取硬盘序列号或 MAC 地址");
+        PR_WARN("无法获取硬盘序列号或 MAC 地址，使用缺省序列号");
+        snprintf((char*)serial_buf, RJV3_SIZE_HDD_SER, "MINIEAP000000000000");
     }
 }
 

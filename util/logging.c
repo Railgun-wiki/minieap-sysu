@@ -16,7 +16,7 @@
 #define LOG_FORMAT_BUFFER_SIZE 1024
 #define DEFAULT_LOG_FILE "/tmp/minieap.log"
 
-static char g_time_buffer[20]; // Buffer for time output
+static char g_time_buffer[64]; // Buffer for time output
 static char* g_log_path = DEFAULT_LOG_FILE; // Log file path
 static FILE* g_log_fp = NULL; // Log destination
 static LOG_DEST g_dest = LOG_TO_CONSOLE;
@@ -28,8 +28,9 @@ static char* get_formatted_date() {
 	time(&time_tmp);
 	time_s = localtime(&time_tmp);
 
-	sprintf(g_time_buffer, "%d/%d/%d %d:%02d:%02d", time_s->tm_year + 1900, time_s->tm_mon + 1,
-				time_s->tm_mday, time_s->tm_hour, time_s->tm_min, time_s->tm_sec);
+	snprintf(g_time_buffer, sizeof(g_time_buffer), "%d/%d/%d %d:%02d:%02d",
+			time_s->tm_year + 1900, time_s->tm_mon + 1,
+			time_s->tm_mday, time_s->tm_hour, time_s->tm_min, time_s->tm_sec);
 	return g_time_buffer;
 }
 

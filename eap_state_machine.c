@@ -341,22 +341,28 @@ static RESULT trans_to_failure(ETH_EAP_FRAME* frame) {
  * this watchdog in transition function if needed.
  */
 RESULT switch_to_state(EAP_STATE state, ETH_EAP_FRAME* frame) {
-    // if (PRIV->state == state) {
-    //     PROG_CONFIG* _cfg = get_program_config();
-    //     PRIV->state_last_count++;
-    //     if (PRIV->state_last_count == _cfg->max_retries) {
-    //         PR_ERR("在 %d 状态已经停留了 %d 次，达到指定次数，正在退出……", PRIV->state, _cfg->max_retries);
-    //         exit(EXIT_FAILURE);
-    //     }
-    // } else {
-    //     /*
-    //      * Reset watchdog before calling trans func
-    //      * in case we need to cancel it there.
-    //      * e.g. after success
-    //      */
-    //     PRIV->state_last_count = 0;
-    //     reset_state_watchdog();
-    // }
+    PROG_CONFIG* _cfg = get_program_config();
+
+    if (PRIV->state == state) {
+        /*
+         * When max_retries > 0, check if we stayed in this state too long.
+         * Setting max_retries <= 0 disables this limit (unlimited retries).
+         */
+        if (_cfg->max_retries > 0) {
+            PRIV->state_last_count++;
+            if (PRIV->state_last_count >= _cfg->max_retries) {
+                PR_ERR("在 %d 状态已经停留了 %d 次，达到重试上限，正在退出……", PRIV->state, _cfg->max_retries);
+                exit(EXIT_FAILURE);
+            }
+        }
+    } else {
+        /*
+         * Reset watchdog before calling trans func
+         * in case we need to cancel it there (e.g. after success)
+         */
+        PRIV->state_last_count = 0;
+        reset_state_watchdog();
+    }
 
     for (int i = 0; i < sizeof(g_transition_table) / sizeof(STATE_TRANSITION); ++i) {
         if (state == g_transition_table[i].state) {
@@ -368,6 +374,6 @@ RESULT switch_to_state(EAP_STATE state, ETH_EAP_FRAME* frame) {
             return SUCCESS;
         }
     }
-    PR_WARN("%d 状态未定义");
+    PR_WARN("%d 状态未定义", state);
     return SUCCESS;
 }

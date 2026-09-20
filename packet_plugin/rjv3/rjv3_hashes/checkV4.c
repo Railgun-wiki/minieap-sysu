@@ -260,18 +260,6 @@ const unsigned char array_1[2035] =
 
 
 
-void display(const unsigned char array[], int length) {
-    int i;
-    for (i = 0; i < length; i++) {
-        if (i%32 == 0) {
-            printf("\n");
-        }
-        if (i%8 == 0) {
-            printf(" ");
-        }
-        printf("%02X", array[i]);
-    }
-}
 
 unsigned char *computeV4(const unsigned char *src, int len)
 {

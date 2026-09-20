@@ -79,7 +79,11 @@ RESULT conf_parser_parse_now() {
 
 	FILE* fp = fopen(g_conf_file, "r");
 	if (fp == NULL) {
-		PR_WARN("无法打开配置文件");
+		if (errno == ENOENT) {
+			PR_INFO("未找到配置文件 %s，将使用默认参数与命令行参数", g_conf_file);
+		} else {
+			PR_WARN("无法打开配置文件 %s: %s", g_conf_file, strerror(errno));
+		}
 		return FAILURE;
 	}
 

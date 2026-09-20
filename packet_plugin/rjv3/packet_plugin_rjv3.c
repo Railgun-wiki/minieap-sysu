@@ -345,7 +345,8 @@ void rjv3_save_config(struct _packet_plugin* this) {
     conf_parser_add_value("max-dhcp-count", my_itoa(PRIV->max_dhcp_count, itoa_buf, 10));
 }
 
-static void packet_plugin_rjv3_print_banner() {
+static void packet_plugin_rjv3_print_banner(struct _packet_plugin* this) {
+    (void)this;
     PR_INFO("\nRJv3 for MiniEAP " VERSION "\n"
             "V3 校验算法来自 @hyrathb\n"
             "Original: Hamster Tian, 2016\n"
