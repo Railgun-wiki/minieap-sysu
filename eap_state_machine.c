@@ -198,25 +198,59 @@ static void restart_auth(void* unused) {
     switch_to_state(EAP_STATE_START_SENT, NULL);
 }
 
+static const char* str_eap_state(EAP_STATE state) {
+    switch (state) {
+        case EAP_STATE_PREPARING:
+            return "准备启动 (PREPARING)";
+        case EAP_STATE_WAITING_FOR_CLIENT_START:
+            return "等待客户端启动 (WAITING_START)";
+        case EAP_STATE_START_SENT:
+            return "寻找认证服务器 (START_SENT)";
+        case EAP_STATE_WAITING_FOR_CLIENT_IDENTITY:
+            return "等待客户端响应用户名 (WAITING_ID)";
+        case EAP_STATE_IDENTITY_SENT:
+            return "已响应用户名 (ID_SENT)";
+        case EAP_STATE_WAITING_FOR_CLILENT_CHALLENGE:
+            return "等待客户端响应密码 (WAITING_MD5)";
+        case EAP_STATE_CHALLENGE_SENT:
+            return "已响应密码验证 (MD5_SENT)";
+        case EAP_STATE_SUCCESS:
+            return "认证成功 (SUCCESS)";
+        case EAP_STATE_FAILURE:
+            return "认证失败 (FAILURE)";
+        default:
+            return "未知状态";
+    }
+}
+
 static RESULT state_mach_process_failure(ETH_EAP_FRAME* frame) {
     PROG_CONFIG* _cfg = get_program_config();
     if (PRIV->state == EAP_STATE_SUCCESS) {
         /* Server forced us offline, not auth failing */
         if (_cfg->restart_on_logoff) {
             /* Wait for this state transition to FAILURE finish */
-            PR_WARN("认证掉线，稍后将重新开始认证……");
+            PR_WARN("认证掉线（服务器发送下线通知），将在 1 秒后自动重新认证……");
             schedule_alarm(1, restart_auth, NULL);
         } else {
-            PR_ERR("认证掉线，正在退出……");
+            PR_ERR("认证掉线（服务器发送下线通知），已配置禁止自动重连，正在退出……");
             exit(EXIT_FAILURE);
         }
     } else {
         /* Fail during auth */
-        if (++PRIV->fail_count == _cfg->max_failures) {
-            PR_ERR("认证失败 %d 次，已达到指定次数，正在退出……", PRIV->fail_count);
+        PRIV->fail_count++;
+        PR_ERR("【认证失败】服务器拒绝了本次认证请求！");
+        PR_ERR("【排障指南】请按以下步骤排查：\n"
+               "  1. 账号或密码是否输入错误（检查大小写、空格）\n"
+               "  2. 账号是否欠费、到期停机或在校园网后台被管理员冻结\n"
+               "  3. 是否超出校园网允许的最大同时在线设备数\n"
+               "  4. 是否绑定了特定网卡 MAC 地址（若绑定了电脑网卡，请在路由 WAN 口设置 MAC 克隆）");
+
+        if (_cfg->max_failures > 0 && PRIV->fail_count >= _cfg->max_failures) {
+            PR_ERR("已连续认证失败 %d 次，达到上限，为防止账号被系统锁定，正在退出……", PRIV->fail_count);
             exit(EXIT_FAILURE);
         } else {
-            PR_WARN("认证失败 %d 次，将在 %d 秒或服务器请求后重试……", PRIV->fail_count, _cfg->wait_after_fail_secs);
+            PR_WARN("认证失败 (第 %d 次)，将在 %d 秒后重新发起认证……",
+                    PRIV->fail_count, _cfg->wait_after_fail_secs);
             schedule_alarm(_cfg->wait_after_fail_secs, restart_auth, NULL);
         }
     }
@@ -275,6 +309,11 @@ void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
  */
 static void reset_state_watchdog();
 static void state_watchdog(void* unused) {
+    PROG_CONFIG* _cfg = get_program_config();
+    PR_WARN("在阶段 [%s] 超时 (%d 秒) 未收到服务器响应，正在进行第 %d 次重试...",
+            str_eap_state(PRIV->state),
+            _cfg->stage_timeout,
+            PRIV->state_last_count + 1);
     switch_to_state(PRIV->state, PRIV->last_recv_frame);
     reset_state_watchdog();
 }
@@ -351,7 +390,23 @@ RESULT switch_to_state(EAP_STATE state, ETH_EAP_FRAME* frame) {
         if (_cfg->max_retries > 0) {
             PRIV->state_last_count++;
             if (PRIV->state_last_count >= _cfg->max_retries) {
-                PR_ERR("在 %d 状态已经停留了 %d 次，达到重试上限，正在退出……", PRIV->state, _cfg->max_retries);
+                PR_ERR("在阶段 [%s] 连续重试 %d 次均超时未收到响应，达到重试上限，正在退出！",
+                       str_eap_state(PRIV->state), _cfg->max_retries);
+                if (PRIV->state == EAP_STATE_START_SENT) {
+                    PR_ERR("【排障指南】未收到来自锐捷认证服务器的应答。可能的原因：\n"
+                           "  1. 路由器 WAN 口网线未插好或指示灯未亮\n"
+                           "  2. 网络接口配置错误（当前配置接口: %s）\n"
+                           "  3. 广播地址模式不匹配，可尝试在 LuCI/命令行配置中更改广播模式（例如 -a 1 私有组播/广播）",
+                           _cfg->ifname ? _cfg->ifname : "未设置");
+                } else if (PRIV->state == EAP_STATE_IDENTITY_SENT) {
+                    PR_ERR("【排障指南】已发送用户名但未收到密码挑战请求。可能的原因：\n"
+                           "  1. 账号不存在或后缀格式不正确\n"
+                           "  2. 锐捷服务名称 (Service-Name) 与校园网不一致");
+                } else if (PRIV->state == EAP_STATE_CHALLENGE_SENT) {
+                    PR_ERR("【排障指南】已发送密码验证但未收到成功确认。可能的原因：\n"
+                           "  1. 密码错误\n"
+                           "  2. 锐捷版本号 (version-str) 不被服务器支持");
+                }
                 exit(EXIT_FAILURE);
             }
         }

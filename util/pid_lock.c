@@ -46,14 +46,14 @@ static RESULT pid_lock_handle_multiple_instance() {
         int pid = atoi(readbuf);
         switch (get_program_config()->kill_type) {
             case KILL_NONE:
-                PR_ERR("已有另一个 MiniEAP 进程正在运行，PID 为 %d", pid);
+                PR_ERR("已有另一个 MiniEAP 进程正在运行 (PID: %d)。如需覆盖并重启请使用 -k 1", pid);
                 return FAILURE;
             case KILL_ONLY:
-                PR_ERR("已有另一个 MiniEAP 进程正在运行，PID 为 %d，即将发送终止信号并退出……", pid);
+                PR_INFO("检测到正在运行的 MiniEAP 进程 (PID: %d)，已发送终止信号。", pid);
                 kill(pid, SIGTERM);
                 return FAILURE;
             case KILL_AND_START:
-                PR_WARN("已有另一个 MiniEAP 进程正在运行，PID 为 %d，将在发送终止信号后继续……", pid);
+                PR_INFO("检测到旧的 MiniEAP 进程 (PID: %d)，已发送终止信号，本进程继续启动……", pid);
                 kill(pid, SIGTERM);
                 return SUCCESS;
             default:

@@ -4,6 +4,7 @@
 #include "minieap_common.h"
 #include "linkedlist.h"
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct _ip_addr {
     unsigned short family;
@@ -41,4 +42,9 @@ RESULT obtain_dns_list(LIST_ELEMENT** list);
 void free_dns_list(LIST_ELEMENT** list);
 
 RESULT obtain_iface_ipv4_gateway(const char* ifname, uint8_t* buf);
+
+/*
+ * Get a comma-separated string of available network interface names.
+ */
+RESULT get_available_interfaces(char* buf, size_t buflen);
 #endif

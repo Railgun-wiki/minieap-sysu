@@ -6,6 +6,7 @@
 #include "minieap_common.h"
 #include "logging.h"
 #include "misc.h"
+#include "net_util.h"
 
 #include <netinet/in.h>
 #include <linux/if_ether.h> // ETH_ALEN
@@ -41,19 +42,23 @@ RESULT sockraw_set_ifname(struct _if_impl* this, const char* ifname) {
     int _tmpsockfd = 0;
 
     if ((_tmpsockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        PR_ERRNO("套接字打开失败");
+        PR_ERRNO("创建临时控制套接字失败");
         return FAILURE;
     }
 
     memset(&ifreq, 0, sizeof(struct ifreq));
-    strncpy(ifreq.ifr_name, ifname, IFNAMSIZ);
+    strncpy(ifreq.ifr_name, ifname, IFNAMSIZ - 1);
     if (ioctl(_tmpsockfd, SIOCGIFINDEX, &ifreq) < 0) {
-        PR_ERRNO("网络界面 ID 获取失败");
+        char if_list[256] = {0};
+        get_available_interfaces(if_list, sizeof(if_list));
+        PR_ERR("找不到指定网络接口 '%s' (SIOCGIFINDEX 失败: %s)。系统当前可用接口: [%s]。请在 LuCI 界面检查网络接口设置！",
+               ifname, strerror(errno), if_list[0] ? if_list : "无可用接口");
+        close(_tmpsockfd);
         return FAILURE;
     }
     PRIV->if_index = ifreq.ifr_ifindex;
 
-    strncpy(PRIV->ifname, ifname, IFNAMSIZ);
+    strncpy(PRIV->ifname, ifname, IFNAMSIZ - 1);
     close(_tmpsockfd);
     return SUCCESS;
 }
@@ -77,18 +82,26 @@ RESULT sockraw_prepare_interface(struct _if_impl* this) {
     struct ifreq ifreq;
 
     if ((PRIV->sockfd = socket(AF_PACKET, SOCK_RAW, htons(PRIV->proto))) < 0) {
-        PR_ERRNO("套接字打开失败");
+        PR_ERRNO("创建原始套接字(AF_PACKET/SOCK_RAW)失败，请确认是否具有 root 权限");
         return FAILURE;
     }
     sockraw_bind_to_if(this, PRIV->proto);
 
-    /* Handle promisc */
+    /* Handle promisc and check interface link status */
     memset(&ifreq, 0, sizeof(struct ifreq));
-    strncpy(ifreq.ifr_name, PRIV->ifname, IFNAMSIZ);
+    strncpy(ifreq.ifr_name, PRIV->ifname, IFNAMSIZ - 1);
 
     if (ioctl(PRIV->sockfd, SIOCGIFFLAGS, &ifreq) < 0) {
         PR_ERRNO("获取网络界面标志信息失败");
         return FAILURE;
+    }
+
+    if (!(ifreq.ifr_flags & IFF_UP)) {
+        PR_WARN("网络接口 '%s' 当前处于 DOWN 状态！认证报文可能无法正常发送，请检查网线或执行 'ip link set %s up'",
+                PRIV->ifname, PRIV->ifname);
+    } else if (!(ifreq.ifr_flags & IFF_RUNNING)) {
+        PR_WARN("网络接口 '%s' 暂无物理载波 (NO-CARRIER)！请确认 WAN 口网线已连接且上级交换机端口正常",
+                PRIV->ifname);
     }
 
     if (PRIV->promisc)

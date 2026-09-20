@@ -13,25 +13,27 @@
 #include "if_impl.h"
 #include "packet_plugin.h"
 #include "conf_parser.h"
+#include "net_util.h"
 
 static EAP_CONFIG g_eap_config;
 static PROXY_CONFIG g_proxy_config;
 static PROG_CONFIG g_prog_config;
 
 static void configure_log_by_daemon_type(DAEMON_TYPE daemon_type) {
+    if (g_prog_config.logfile != NULL) {
+        set_log_file_path(g_prog_config.logfile);
+    }
     switch (daemon_type) {
         case DAEMON_FOREGROUND:
             set_log_destination(LOG_TO_CONSOLE);
             break;
         case DAEMON_NO_LOG:
-            set_log_file_path("/dev/null");
-            set_log_destination(LOG_TO_FILE);
+            set_log_destination(LOG_NONE);
             break;
         case DAEMON_CONSOLE_LOG:
             set_log_destination(LOG_TO_CONSOLE);
             break;
         case DAEMON_FILE_LOG:
-            set_log_file_path(g_prog_config.logfile);
             set_log_destination(LOG_TO_FILE);
             break;
     }
@@ -168,6 +170,7 @@ static void parse_one_opt(const char* option, const char* argument) {
         COPY_N_ARG_TO(g_prog_config.pidfile, MAX_PATH);
     } else if (ISOPT("log-file")) {
         COPY_N_ARG_TO(g_prog_config.logfile, MAX_PATH);
+        set_log_file_path(g_prog_config.logfile);
     }
 }
 
@@ -277,17 +280,35 @@ RESULT save_config_file() {
  * If more than one of them is missing, refuse to proceed.
  */
 RESULT validate_params() {
-#define ASSERT_NOTIFY(x, msg) \
-    if (x) { \
-        PR_ERR(msg); \
-        return FAILURE; \
+    if (!g_proxy_config.proxy_on && !g_eap_config.username) {
+        PR_ERR("【配置错误】用户名 (username) 不能为空！请在 LuCI 界面或配置文件中填写您的认证账号。");
+        return FAILURE;
+    }
+    if (!g_proxy_config.proxy_on && !g_eap_config.password) {
+        PR_ERR("【配置错误】密码 (password) 不能为空！请在 LuCI 界面或配置文件中填写您的认证密码。");
+        return FAILURE;
+    }
+    if (g_proxy_config.proxy_on && !g_proxy_config.lan_ifname) {
+        PR_ERR("【配置错误】代理认证开启时，LAN 侧网卡名不能为空！");
+        return FAILURE;
+    }
+    if (!g_prog_config.ifname || g_prog_config.ifname[0] == 0) {
+        char if_list[256] = {0};
+        get_available_interfaces(if_list, sizeof(if_list));
+        PR_ERR("【配置错误】网络接口 (nic) 不能为空！当前系统检测到的可用网卡: [%s]。请在 LuCI 界面配置正确的接口名称。",
+               if_list[0] ? if_list : "无可用网卡");
+        return FAILURE;
     }
 
-    ASSERT_NOTIFY(!g_proxy_config.proxy_on && !g_eap_config.username, "用户名不能为空");
-    ASSERT_NOTIFY(!g_proxy_config.proxy_on && !g_eap_config.password, "密码不能为空");
-    ASSERT_NOTIFY(g_proxy_config.proxy_on && !g_proxy_config.lan_ifname,
-                        "代理认证开启时，LAN 侧网卡名不能为空");
-    ASSERT_NOTIFY(!g_prog_config.ifname, "网卡名不能为空");
+    PR_INFO("MiniEAP 参数校验通过: 网卡=%s, 用户名=%s, 运行模式=%s, 重试上限=%d, 超时=%ds",
+            g_prog_config.ifname,
+            g_proxy_config.proxy_on ? "(代理模式)" : (g_eap_config.username ? g_eap_config.username : ""),
+            g_prog_config.daemon_type == DAEMON_FILE_LOG ? "后台运行(文件日志)" :
+            (g_prog_config.daemon_type == DAEMON_NO_LOG ? "后台运行(静默)" :
+            (g_prog_config.daemon_type == DAEMON_CONSOLE_LOG ? "后台运行(控制台日志)" : "前台运行")),
+            g_prog_config.max_retries,
+            g_prog_config.stage_timeout);
+
     return SUCCESS;
 }
 

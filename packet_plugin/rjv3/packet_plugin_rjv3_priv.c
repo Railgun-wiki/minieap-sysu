@@ -217,14 +217,15 @@ static RESULT rjv3_get_dhcp_lease(struct _packet_plugin* this, DHCP_LEASE* lease
     if (IS_FAIL(obtain_iface_ip_mask(_ifname, &_ip_list))
             || (_ipv4 = find_ip_with_family(_ip_list, AF_INET)) == NULL) {
 
-        PR_ERR("IPv4 地址获取错误");
+        PR_ERR("网络接口 '%s' 尚未获取到 IPv4 地址！", _ifname);
+        PR_ERR("【排障指南】若所在网络需认证后才分配 IP，请在 LuCI 界面将 DHCP 方式设置为 '认证后获取IP' (dhcp_type = 3)；若需要在认证前获取，请确认 WAN 口 DHCP 客户端已正常获取到有效 IP。");
         goto fail;
     }
 
     IP_ADDR _gw;
     _gw.family = AF_INET;
     if (IS_FAIL(obtain_iface_ipv4_gateway(_ifname, _gw.ip))) {
-        PR_ERR("IPv4 网关获取错误");
+        PR_ERR("网络接口 '%s' 无法获取 IPv4 默认网关！请检查上级路由 DHCP 是否分配了网关，或尝试将 DHCP 方式设为 '认证后获取IP' (dhcp_type = 3)。", _ifname);
         goto fail;
     }
 
@@ -233,7 +234,7 @@ static RESULT rjv3_get_dhcp_lease(struct _packet_plugin* this, DHCP_LEASE* lease
     _dns1.family = AF_INET;
     if (!PRIV->fake_dns1) {
         if (IS_FAIL(obtain_dns_list(&_dns_list))) {
-            PR_ERR("主 DNS 地址获取错误，请使用 --fake-dns1 选项手动指定主 DNS 地址");
+            PR_ERR("未找到系统 DNS 服务器地址！请使用 --fake-dns1 选项手动指定主 DNS 地址（如 10.8.8.8 或 114.114.114.114）");
             goto fail;
         }
         _dns1_str = _dns_list->content;
@@ -241,8 +242,8 @@ static RESULT rjv3_get_dhcp_lease(struct _packet_plugin* this, DHCP_LEASE* lease
         _dns1_str = PRIV->fake_dns1;
     }
     if (inet_pton(AF_INET, _dns1_str, &_dns1.ip) == 0) {
-            PR_ERR("主 DNS 地址格式错误，要求 IPv4 地址。请使用 --fake-dns1 选项手动指定主 DNS 地址");
-            goto fail;
+        PR_ERR("主 DNS 地址格式错误，要求 IPv4 地址（当前: %s）。请在 LuCI 或参数中指定有效 IPv4 DNS 地址", _dns1_str);
+        goto fail;
     }
 
     *(uint32_t*)&lease->ip = *(uint32_t*)&_ipv4->ip;
@@ -475,7 +476,12 @@ RESULT rjv3_process_result_prop(ETH_EAP_FRAME* frame) {
         int _content_len = _msg->header2.len - HEADER2_SIZE_NO_MAGIC(_msg);
 
         if (_content_len != 0) {
-            PR_INFO("服务器通知：\n");
+            if (frame->header->eapol_hdr.type[0] == EAP_PACKET &&
+                frame->header->eap_hdr.code[0] == EAP_FAILURE) {
+                PR_WARN(">>> 锐捷服务器拒绝原因通知 <<<");
+            } else {
+                PR_INFO(">>> 锐捷认证服务器通知 <<<");
+            }
             pr_info_gbk((char*)_msg->content, _content_len);
         }
     }

@@ -105,16 +105,15 @@ void gbk2utf8(char* in, size_t inlen, char* out, size_t outlen) {
 }
 
 void pr_info_gbk(char* in, size_t inlen) {
-    size_t _utf8_size = inlen << 2;
+    size_t _utf8_size = (inlen << 2) + 1;
     char* _utf8_buf = (char*)malloc(_utf8_size);
-    memset(_utf8_buf, 0, _utf8_size);
     if (_utf8_buf != NULL) {
+        memset(_utf8_buf, 0, _utf8_size);
         gbk2utf8(in, inlen, _utf8_buf, _utf8_size);
         PR_INFO("%s", _utf8_buf);
         free(_utf8_buf);
     } else {
-        _utf8_buf = in;
-        PR_INFO("%s", _utf8_buf);
+        PR_INFO("%.*s", (int)inlen, in);
     }
 }
 

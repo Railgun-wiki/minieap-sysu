@@ -359,3 +359,32 @@ RESULT obtain_iface_ipv4_gateway(const char* ifname, uint8_t* _buf) {
     return FAILURE;
 }
 #endif
+
+RESULT get_available_interfaces(char* buf, size_t buflen) {
+    struct ifaddrs *ifaddrs, *if_curr;
+    size_t written = 0;
+    if (buf == NULL || buflen == 0) return FAILURE;
+    buf[0] = 0;
+
+    if (getifaddrs(&ifaddrs) < 0) {
+        return FAILURE;
+    }
+
+    if_curr = ifaddrs;
+    while (if_curr != NULL) {
+        if (if_curr->ifa_name != NULL) {
+            /* Avoid duplicate names in list */
+            if (strstr(buf, if_curr->ifa_name) == NULL) {
+                if (written > 0 && written < buflen - 2) {
+                    written += snprintf(buf + written, buflen - written, ", ");
+                }
+                if (written < buflen - 1) {
+                    written += snprintf(buf + written, buflen - written, "%s", if_curr->ifa_name);
+                }
+            }
+        }
+        if_curr = if_curr->ifa_next;
+    }
+    freeifaddrs(ifaddrs);
+    return SUCCESS;
+}

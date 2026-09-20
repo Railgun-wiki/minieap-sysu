@@ -1,7 +1,7 @@
 /* -*- Mode: C; tab-width: 4; -*- */
 /*
 * 文件名称：logging.c
-* 摘	要：MiniEAP日志功能
+* 摘	要：MiniEAP日志功能 (支持双路输出、syslog集成及LuCI配合)
 * 作	者：updateing@HUST
 * 邮	箱：haotia@gmail.com
 */
@@ -10,16 +10,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <syslog.h>
 
 #include "logging.h"
 
 #define LOG_FORMAT_BUFFER_SIZE 1024
-#define DEFAULT_LOG_FILE "/tmp/minieap.log"
+#define DEFAULT_LOG_FILE "/var/log/minieap.log"
 
-static char g_time_buffer[64]; // Buffer for time output
-static char* g_log_path = DEFAULT_LOG_FILE; // Log file path
-static FILE* g_log_fp = NULL; // Log destination
+static char g_time_buffer[64];
+static char* g_log_path = DEFAULT_LOG_FILE;
+static FILE* g_file_fp = NULL;
 static LOG_DEST g_dest = LOG_TO_CONSOLE;
+static int g_syslog_opened = 0;
 
 static char* get_formatted_date() {
 	time_t time_tmp;
@@ -34,97 +36,134 @@ static char* get_formatted_date() {
 	return g_time_buffer;
 }
 
-/*
- * 打印一行文本
- */
-static void print_raw_line(FILE* log_file, const char* log_format, va_list argptr) {
-	if (log_file == NULL) {
-		fprintf(stderr, "Internal error: Log destination is not set, printing to stdout!\n");
-		log_file = stdout;
-	}
-	vfprintf(log_file, log_format, argptr);
-}
-
-/*
- * 打印一行日志并附加时间与调用点信息
- */
-static void print_detail_line(FILE* log_file, const char* log_level,
-                      const char* func_name, const char* log_format, va_list argptr) {
-	char format_buffer[LOG_FORMAT_BUFFER_SIZE];
-    int _strlen;
-
-    if (func_name != NULL && func_name[0] != 0) {
-	    snprintf(format_buffer, LOG_FORMAT_BUFFER_SIZE, "[%s][%s](%s) %s",
-	            get_formatted_date(), log_level, func_name, log_format);
-	} else {
-	    snprintf(format_buffer, LOG_FORMAT_BUFFER_SIZE, "[%s][%s] %s",
-	             get_formatted_date(), log_level, log_format);
-	}
-
-	/* Append a newline if not exist */
-	_strlen = strlen(format_buffer);
-	if (format_buffer[_strlen - 1] != '\n') {
-	    format_buffer[_strlen] = '\n';
-	    format_buffer[_strlen + 1] = 0;
-	}
-
-	print_raw_line(log_file, format_buffer, argptr);
-}
-
-/*
- * 设置日志的目标，是打印到标准输出还是写入文件
- *
- * 注：写入文件时，将直接打开文件来写入，而不是reopen stdout到文件。
- * 故仍可以使用printf来直接打印到控制台（用户交互使用）
- */
 void set_log_destination(LOG_DEST dst) {
     g_dest = dst;
 }
 
-/*
- * 按之前的目标设置来打印一行日志
- */
-void print_log(const char* log_level, const char* func_name, const char* log_format, ...) {
-	va_list argptr;
+void set_log_file_path(char* path) {
+    if (path == NULL) return;
+    if (g_log_path != NULL && strcmp(g_log_path, path) == 0) return;
 
-	va_start(argptr, log_format);
-	print_detail_line(g_log_fp, log_level, func_name, log_format, argptr);
-	va_end(argptr);
-}
-
-/*
- * 按之前的目标设置来打印一行文本，不添加时间标记
- */
-void print_log_raw(const char* log_format, ...) {
-	va_list argptr;
-
-	va_start(argptr, log_format);
-	print_raw_line(g_log_fp, log_format, argptr);
-	va_end(argptr);
+    if (g_file_fp != NULL) {
+        fclose(g_file_fp);
+        g_file_fp = NULL;
+    }
+    g_log_path = path;
+    if (strcmp(g_log_path, "/dev/null") != 0 && strcmp(g_log_path, "none") != 0) {
+        g_file_fp = fopen(g_log_path, "a");
+        if (g_file_fp != NULL) {
+            setvbuf(g_file_fp, NULL, _IOLBF, BUFSIZ);
+        }
+    }
 }
 
 void start_log() {
-	switch (g_dest) {
-		case LOG_TO_CONSOLE:
-			g_log_fp = stdout;
-			break;
-		case LOG_TO_FILE:
-			g_log_fp = fopen(g_log_path, "a");
-			if (g_log_fp == NULL) {
-			    g_log_fp = stdout;
-			    g_dest = LOG_TO_CONSOLE;
-			    PR_ERRNO("日志文件打开失败，将输出至控制台");
-			}
-			break;
-	}
-	setvbuf(g_log_fp, NULL, _IOLBF, BUFSIZ);
+    if (!g_syslog_opened) {
+        openlog("minieap", LOG_PID | LOG_NDELAY, LOG_DAEMON);
+        g_syslog_opened = 1;
+    }
+
+    if (g_file_fp == NULL && g_log_path != NULL &&
+        strcmp(g_log_path, "/dev/null") != 0 && strcmp(g_log_path, "none") != 0) {
+        g_file_fp = fopen(g_log_path, "a");
+        if (g_file_fp != NULL) {
+            setvbuf(g_file_fp, NULL, _IOLBF, BUFSIZ);
+        }
+    }
 }
 
 void close_log() {
-    if (g_dest == LOG_TO_FILE)
-        fclose(g_log_fp);
+    if (g_file_fp != NULL) {
+        fclose(g_file_fp);
+        g_file_fp = NULL;
+    }
+    if (g_syslog_opened) {
+        closelog();
+        g_syslog_opened = 0;
+    }
 }
 
-void set_log_file_path(char* path) {
-    g_log_path = path;
+static void print_detail_line(const char* log_level, const char* func_name,
+                              const char* log_format, va_list argptr) {
+    char user_buffer[LOG_FORMAT_BUFFER_SIZE];
+    char line_buffer[LOG_FORMAT_BUFFER_SIZE + 128];
+    va_list arg_copy;
+
+    va_copy(arg_copy, argptr);
+    vsnprintf(user_buffer, sizeof(user_buffer), log_format, arg_copy);
+    va_end(arg_copy);
+
+    if (func_name != NULL && func_name[0] != 0) {
+        snprintf(line_buffer, sizeof(line_buffer), "[%s][%s](%s) %s\n",
+                 get_formatted_date(), log_level, func_name, user_buffer);
+    } else {
+        snprintf(line_buffer, sizeof(line_buffer), "[%s][%s] %s\n",
+                 get_formatted_date(), log_level, user_buffer);
+    }
+
+    /* Output to Console (if foreground) */
+    if (g_dest == LOG_TO_CONSOLE) {
+        fputs(line_buffer, stdout);
+        fflush(stdout);
+    }
+
+    /* Output to Log File (always keep /var/log/minieap.log updated for LuCI) */
+    if (g_dest != LOG_NONE && g_file_fp != NULL) {
+        long sz = ftell(g_file_fp);
+        if (sz > 256 * 1024) {
+            FILE* new_fp = freopen(g_log_path, "w", g_file_fp);
+            if (new_fp != NULL) {
+                g_file_fp = new_fp;
+                fputs("[MiniEAP] 日志大小超过 256KB，已自动循环重置\n", g_file_fp);
+            }
+        }
+        fputs(line_buffer, g_file_fp);
+        fflush(g_file_fp);
+    }
+
+    /* Output to OpenWrt Syslog (for logread / LuCI System Log) */
+    if (g_syslog_opened) {
+        int priority = LOG_INFO;
+        if (strcmp(log_level, "E") == 0) priority = LOG_ERR;
+        else if (strcmp(log_level, "W") == 0) priority = LOG_WARNING;
+        else if (strcmp(log_level, "D") == 0) priority = LOG_DEBUG;
+
+        if (func_name != NULL && func_name[0] != 0) {
+            syslog(priority, "[%s](%s) %s", log_level, func_name, user_buffer);
+        } else {
+            syslog(priority, "[%s] %s", log_level, user_buffer);
+        }
+    }
+}
+
+static void print_raw_line(const char* log_format, va_list argptr) {
+    char user_buffer[LOG_FORMAT_BUFFER_SIZE];
+    va_list arg_copy;
+
+    va_copy(arg_copy, argptr);
+    vsnprintf(user_buffer, sizeof(user_buffer), log_format, arg_copy);
+    va_end(arg_copy);
+
+    if (g_dest == LOG_TO_CONSOLE) {
+        fputs(user_buffer, stdout);
+        fflush(stdout);
+    }
+    if (g_dest != LOG_NONE && g_file_fp != NULL) {
+        fputs(user_buffer, g_file_fp);
+        fflush(g_file_fp);
+    }
+}
+
+void print_log(const char* log_level, const char* func_name, const char* log_format, ...) {
+	va_list argptr;
+	va_start(argptr, log_format);
+	print_detail_line(log_level, func_name, log_format, argptr);
+	va_end(argptr);
+}
+
+void print_log_raw(const char* log_format, ...) {
+	va_list argptr;
+	va_start(argptr, log_format);
+	print_raw_line(log_format, argptr);
+	va_end(argptr);
 }
