@@ -278,9 +278,9 @@ void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
     /* 2. Ignore packets not destined for us, broadcast, or PAE multicast */
     static const uint8_t pae_group[6] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x03};
     static const uint8_t bcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    if (memcmp(frame->header->eth_hdr.dst_mac, PRIV->local_mac, 6) != 0 &&
-        memcmp(frame->header->eth_hdr.dst_mac, pae_group, 6) != 0 &&
-        memcmp(frame->header->eth_hdr.dst_mac, bcast, 6) != 0) {
+    if (memcmp(frame->header->eth_hdr.dest_mac, PRIV->local_mac, 6) != 0 &&
+        memcmp(frame->header->eth_hdr.dest_mac, pae_group, 6) != 0 &&
+        memcmp(frame->header->eth_hdr.dest_mac, bcast, 6) != 0) {
         return;
     }
 
