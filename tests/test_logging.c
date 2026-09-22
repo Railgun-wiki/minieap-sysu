@@ -104,9 +104,26 @@ static void test_rotation_failure_keeps_old_stream(void) {
     rmdir(moved_dir);
 }
 
+static void test_log_open_failure_is_reported(void) {
+    char dir[] = "/tmp/minieap-missing-log-dir.XXXXXX";
+    assert(mkdtemp(dir) != NULL);
+
+    char path[sizeof(dir) + 8];
+    snprintf(path, sizeof(path), "%s/log", dir);
+    assert(rmdir(dir) == 0);
+
+    set_log_destination(LOG_TO_FILE);
+    set_log_file_path(path);
+    g_syslog_calls = 0;
+    start_log();
+    assert(g_syslog_calls >= 1);
+    close_log();
+}
+
 int main(void) {
     test_log_path_is_owned();
     test_log_none_disables_syslog();
     test_rotation_failure_keeps_old_stream();
+    test_log_open_failure_is_reported();
     return 0;
 }

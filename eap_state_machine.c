@@ -8,6 +8,7 @@
 #include "packet_util.h"
 #include "minieap_common.h"
 #include "eth_frame.h"
+#include "eap_frame_validation.h"
 #include "net_util.h"
 #include "retry_policy.h"
 #include "sched_alarm.h"
@@ -266,38 +267,38 @@ static RESULT state_mach_process_failure(ETH_EAP_FRAME* frame) {
  * and switch to next state (to send response)
  */
 void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
-    if (frame == NULL || frame->content == NULL || frame->actual_len < 18) {
+    if (!eap_frame_has_valid_lengths(frame)) {
         return;
     }
 
     /* 1. Ignore packets sent by ourselves (e.g. from raw socket reflections) */
-    if (memcmp(frame->header->eth_hdr.src_mac, PRIV->local_mac, 6) == 0) {
+    if (memcmp(eap_frame_source_mac(frame), PRIV->local_mac, 6) == 0) {
         return;
     }
 
     /* 2. Ignore packets not destined for us, broadcast, or PAE multicast */
     static const uint8_t pae_group[6] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x03};
     static const uint8_t bcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    if (memcmp(frame->header->eth_hdr.dest_mac, PRIV->local_mac, 6) != 0 &&
-        memcmp(frame->header->eth_hdr.dest_mac, pae_group, 6) != 0 &&
-        memcmp(frame->header->eth_hdr.dest_mac, bcast, 6) != 0) {
+    if (memcmp(eap_frame_dest_mac(frame), PRIV->local_mac, 6) != 0 &&
+        memcmp(eap_frame_dest_mac(frame), pae_group, 6) != 0 &&
+        memcmp(eap_frame_dest_mac(frame), bcast, 6) != 0) {
         return;
     }
 
-    /* 3. Supplicant only processes EAP_PACKET frames */
-    EAPOL_TYPE _eapol_type = frame->header->eapol_hdr.type[0];
-    if (_eapol_type != EAP_PACKET) {
-        return;
+    /* 3. Only accept the request types this supplicant can answer. */
+    EAP_CODE _eap_code = eap_frame_code(frame);
+    EAP_TYPE _eap_type = 0;
+    if (_eap_code == EAP_REQUEST) {
+        _eap_type = eap_frame_type(frame);
+        if (_eap_type != IDENTITY && _eap_type != MD5_CHALLENGE) {
+            return;
+        }
     }
 
-    if (frame->actual_len < 22) {
-        return;
-    }
-
-    /* 4. Supplicants only receive REQUEST, SUCCESS, and FAILURE from authenticator.
-     * Ignore RESPONSE packets sent by other clients on the same shared segment. */
-    EAP_CODE _eap_code = frame->header->eap_hdr.code[0];
-    if (_eap_code != EAP_REQUEST && _eap_code != EAP_SUCCESS && _eap_code != EAP_FAILURE) {
+    /* 4. Once an authenticator is discovered, reject frames from other sources.
+     * Before discovery, only a supported Request may establish its MAC address. */
+    int server_known = memcmp(PRIV->server_mac, BCAST_ADDR, sizeof(BCAST_ADDR)) != 0;
+    if (!eap_frame_source_is_expected(frame, PRIV->server_mac, server_known)) {
         return;
     }
 
@@ -306,16 +307,18 @@ void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
         free_frame(&PRIV->last_recv_frame);
     }
     PRIV->last_recv_frame = frame_duplicate(frame);
+    if (PRIV->last_recv_frame == NULL) {
+        PR_ERR("无法复制接收到的 EAP 帧");
+        return;
+    }
     packet_plugin_on_frame_received(PRIV->last_recv_frame);
-
-    EAP_TYPE _eap_type = frame->header->eap_hdr.type[0];
 
     switch (_eap_code) {
         case EAP_REQUEST:
             /*
              * Store server's MAC addr, do not use broadcast after.
              */
-            memmove(PRIV->server_mac, frame->header->eth_hdr.src_mac, 6);
+            memmove(PRIV->server_mac, eap_frame_source_mac(frame), 6);
             if (_eap_type == IDENTITY) {
                 if (PRIV->state == EAP_STATE_SUCCESS) {
                     /*

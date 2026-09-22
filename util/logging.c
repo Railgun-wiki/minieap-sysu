@@ -24,6 +24,18 @@ static FILE* g_file_fp = NULL;
 static LOG_DEST g_dest = LOG_TO_CONSOLE;
 static int g_syslog_opened = 0;
 
+static void report_log_open_failure(void) {
+    int saved_errno = errno;
+    if (g_syslog_opened) {
+        syslog(LOG_ERR, "[E] 无法打开日志文件 %s: %s (%d)",
+               g_log_path, strerror(saved_errno), saved_errno);
+    }
+    if (g_dest == LOG_TO_CONSOLE) {
+        fprintf(stderr, "无法打开日志文件 %s: %s (%d)\n",
+                g_log_path, strerror(saved_errno), saved_errno);
+    }
+}
+
 static char* get_formatted_date(void) {
 	time_t time_tmp;
 	struct tm* time_s;
@@ -54,6 +66,8 @@ void set_log_file_path(const char* path) {
         g_file_fp = fopen(g_log_path, "a");
         if (g_file_fp != NULL) {
             setvbuf(g_file_fp, NULL, _IOLBF, BUFSIZ);
+        } else if (g_syslog_opened) {
+            report_log_open_failure();
         }
     }
 }
@@ -73,6 +87,8 @@ void start_log(void) {
         g_file_fp = fopen(g_log_path, "a");
         if (g_file_fp != NULL) {
             setvbuf(g_file_fp, NULL, _IOLBF, BUFSIZ);
+        } else {
+            report_log_open_failure();
         }
     }
 }

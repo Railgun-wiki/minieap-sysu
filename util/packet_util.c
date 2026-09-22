@@ -15,11 +15,21 @@ RESULT append_to_frame(ETH_EAP_FRAME* frame, const uint8_t* data, int len) {
 }
 
 ETH_EAP_FRAME* frame_duplicate(const ETH_EAP_FRAME* frame) {
+    if (frame == NULL || frame->content == NULL) {
+        return NULL;
+    }
+
     ETH_EAP_FRAME* _frame = (ETH_EAP_FRAME*)malloc(sizeof(ETH_EAP_FRAME));
+    if (_frame == NULL) {
+        return NULL;
+    }
+    size_t allocation_len = frame->actual_len < sizeof(FRAME_HEADER)
+                          ? sizeof(FRAME_HEADER) : frame->actual_len;
     _frame->actual_len = frame->actual_len;
-    _frame->buffer_len = frame->buffer_len;
-    _frame->content = (uint8_t*)malloc(_frame->actual_len);
+    _frame->buffer_len = allocation_len;
+    _frame->content = (uint8_t*)calloc(allocation_len, 1);
     if (_frame->content == NULL) {
+        free(_frame);
         return NULL;
     }
     memmove(_frame->content, frame->content, _frame->actual_len);

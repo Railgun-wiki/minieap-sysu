@@ -1,0 +1,132 @@
+[
+  {
+    "file": "01_eapol_start.bin",
+    "description": "EAPOL-Start packet sent by supplicant client to 802.1X multicast (01:80:c2:00:00:03)",
+    "length": 18,
+    "dst_mac": "01:80:c2:00:00:03",
+    "src_mac": "02:00:00:00:00:01",
+    "eapol_type": 1,
+    "eap_code": null,
+    "eap_type": null
+  },
+  {
+    "file": "02_server_req_identity_bcast.bin",
+    "description": "EAP-Request/Identity broadcast from campus switch authenticator",
+    "length": 64,
+    "dst_mac": "01:80:c2:00:00:03",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 1,
+    "eap_type": 1
+  },
+  {
+    "file": "03_client_resp_identity.bin",
+    "description": "EAP-Response/Identity containing sanitized username (testuser)",
+    "length": 31,
+    "dst_mac": "02:00:00:00:00:fe",
+    "src_mac": "02:00:00:00:00:01",
+    "eapol_type": 0,
+    "eap_code": 2,
+    "eap_type": 1
+  },
+  {
+    "file": "04_server_req_md5_challenge_round1.bin",
+    "description": "EAP-Request/MD5-Challenge first stage (id=2, standard challenge)",
+    "length": 64,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 1,
+    "eap_type": 4
+  },
+  {
+    "file": "05_client_resp_md5_challenge_round1.bin",
+    "description": "EAP-Response/MD5-Challenge first stage response (sanitized MD5 digest)",
+    "length": 48,
+    "dst_mac": "02:00:00:00:00:fe",
+    "src_mac": "02:00:00:00:00:01",
+    "eapol_type": 0,
+    "eap_code": 2,
+    "eap_type": 4
+  },
+  {
+    "file": "06_server_req_md5_challenge_sysu_round2.bin",
+    "description": "EAP-Request/MD5-Challenge second stage with SYSU server properties and helpdesk message",
+    "length": 241,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 1,
+    "eap_type": 4
+  },
+  {
+    "file": "07_client_resp_md5_challenge_round2.bin",
+    "description": "EAP-Response/MD5-Challenge second stage response (sanitized MD5 digest)",
+    "length": 48,
+    "dst_mac": "02:00:00:00:00:fe",
+    "src_mac": "02:00:00:00:00:01",
+    "eapol_type": 0,
+    "eap_code": 2,
+    "eap_type": 4
+  },
+  {
+    "file": "08_server_eap_success.bin",
+    "description": "EAP-Success packet from campus switch (id=3)",
+    "length": 64,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 3,
+    "eap_type": 0
+  },
+  {
+    "file": "09_server_req_identity_unicast_keepalive.bin",
+    "description": "EAP-Request/Identity periodic unicast keepalive from switch to authenticated client",
+    "length": 64,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 1,
+    "eap_type": 1
+  },
+  {
+    "file": "10_client_resp_identity_keepalive.bin",
+    "description": "EAP-Response/Identity keepalive response sent back to switch",
+    "length": 31,
+    "dst_mac": "02:00:00:00:00:fe",
+    "src_mac": "02:00:00:00:00:01",
+    "eapol_type": 0,
+    "eap_code": 2,
+    "eap_type": 1
+  },
+  {
+    "file": "11_foreign_neighbor_resp_identity.bin",
+    "description": "EAP-Response/Identity sent by neighbor client to multicast (used to test socket isolation/filtering)",
+    "length": 60,
+    "dst_mac": "01:80:c2:00:00:03",
+    "src_mac": "02:00:00:00:00:02",
+    "eapol_type": 0,
+    "eap_code": 2,
+    "eap_type": 1
+  },
+  {
+    "file": "12_server_eap_failure.bin",
+    "description": "EAP-Failure packet from authenticator",
+    "length": 64,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 4,
+    "eap_type": 0
+  },
+  {
+    "file": "13_server_req_md5_sysu_reauth_notify.bin",
+    "description": "EAP-Request/MD5-Challenge with SYSU not-logged-off warning message prompting re-auth",
+    "length": 113,
+    "dst_mac": "02:00:00:00:00:01",
+    "src_mac": "02:00:00:00:00:fe",
+    "eapol_type": 0,
+    "eap_code": 1,
+    "eap_type": 4
+  }
+]
