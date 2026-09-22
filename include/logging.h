@@ -62,16 +62,16 @@ void print_log(const char* log_level, const char* func, const char* log_format, 
 /*
  * Start logging according to previously set destination
  */
-void start_log();
+void start_log(void);
 
 /*
  * Close opened file, if LOG_TO_FILE
  */
-void close_log();
+void close_log(void);
 
 /*
  * Do this before start_log(),
  * Or you have to close_log() and start_log() again.
  */
-void set_log_file_path(char* path);
+void set_log_file_path(const char* path);
 #endif

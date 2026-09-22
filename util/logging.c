@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <syslog.h>
+#include <limits.h>
 
 #include "logging.h"
 
@@ -18,12 +19,12 @@
 #define DEFAULT_LOG_FILE "/var/log/minieap.log"
 
 static char g_time_buffer[64];
-static char* g_log_path = DEFAULT_LOG_FILE;
+static char g_log_path[PATH_MAX] = DEFAULT_LOG_FILE;
 static FILE* g_file_fp = NULL;
 static LOG_DEST g_dest = LOG_TO_CONSOLE;
 static int g_syslog_opened = 0;
 
-static char* get_formatted_date() {
+static char* get_formatted_date(void) {
 	time_t time_tmp;
 	struct tm* time_s;
 
@@ -40,15 +41,15 @@ void set_log_destination(LOG_DEST dst) {
     g_dest = dst;
 }
 
-void set_log_file_path(char* path) {
+void set_log_file_path(const char* path) {
     if (path == NULL) return;
-    if (g_log_path != NULL && strcmp(g_log_path, path) == 0) return;
+    if (strcmp(g_log_path, path) == 0) return;
 
     if (g_file_fp != NULL) {
         fclose(g_file_fp);
         g_file_fp = NULL;
     }
-    g_log_path = path;
+    snprintf(g_log_path, sizeof(g_log_path), "%s", path);
     if (strcmp(g_log_path, "/dev/null") != 0 && strcmp(g_log_path, "none") != 0) {
         g_file_fp = fopen(g_log_path, "a");
         if (g_file_fp != NULL) {
@@ -57,13 +58,17 @@ void set_log_file_path(char* path) {
     }
 }
 
-void start_log() {
+void start_log(void) {
+    if (g_dest == LOG_NONE) {
+        return;
+    }
+
     if (!g_syslog_opened) {
         openlog("minieap", LOG_PID | LOG_NDELAY, LOG_DAEMON);
         g_syslog_opened = 1;
     }
 
-    if (g_file_fp == NULL && g_log_path != NULL &&
+    if (g_file_fp == NULL &&
         strcmp(g_log_path, "/dev/null") != 0 && strcmp(g_log_path, "none") != 0) {
         g_file_fp = fopen(g_log_path, "a");
         if (g_file_fp != NULL) {
@@ -72,7 +77,7 @@ void start_log() {
     }
 }
 
-void close_log() {
+void close_log(void) {
     if (g_file_fp != NULL) {
         fclose(g_file_fp);
         g_file_fp = NULL;
@@ -111,10 +116,15 @@ static void print_detail_line(const char* log_level, const char* func_name,
     if (g_dest != LOG_NONE && g_file_fp != NULL) {
         long sz = ftell(g_file_fp);
         if (sz > 256 * 1024) {
-            FILE* new_fp = freopen(g_log_path, "w", g_file_fp);
+            FILE* old_fp = g_file_fp;
+            FILE* new_fp = fopen(g_log_path, "w");
             if (new_fp != NULL) {
+                fclose(old_fp);
                 g_file_fp = new_fp;
+                setvbuf(g_file_fp, NULL, _IOLBF, BUFSIZ);
                 fputs("[MiniEAP] 日志大小超过 256KB，已自动循环重置\n", g_file_fp);
+            } else if (g_syslog_opened) {
+                syslog(LOG_ERR, "[E] 日志轮转失败，继续写入现有日志文件: %s", strerror(errno));
             }
         }
         fputs(line_buffer, g_file_fp);
@@ -122,7 +132,7 @@ static void print_detail_line(const char* log_level, const char* func_name,
     }
 
     /* Output to OpenWrt Syslog (for logread / LuCI System Log) */
-    if (g_syslog_opened) {
+    if (g_dest != LOG_NONE && g_syslog_opened) {
         int priority = LOG_INFO;
         if (strcmp(log_level, "E") == 0) priority = LOG_ERR;
         else if (strcmp(log_level, "W") == 0) priority = LOG_WARNING;

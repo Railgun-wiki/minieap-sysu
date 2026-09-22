@@ -50,6 +50,11 @@ minieap: $(BUILD_MODULES)
 .PHONY: clean
 clean:
 	rm -f minieap.service minieap.1.gz
+	$(MAKE) -C tests clean
+
+.PHONY: test
+test:
+	$(MAKE) -C tests CC="$(CC)"
 
 define my-dir
 $(dir $(lastword $(MAKEFILE_LIST)))

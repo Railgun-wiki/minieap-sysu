@@ -9,6 +9,7 @@
 #include "minieap_common.h"
 #include "eth_frame.h"
 #include "net_util.h"
+#include "retry_policy.h"
 #include "sched_alarm.h"
 
 #include <stdlib.h>
@@ -310,10 +311,32 @@ void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
 static void reset_state_watchdog();
 static void state_watchdog(void* unused) {
     PROG_CONFIG* _cfg = get_program_config();
+    if (eap_retry_limit_reached(PRIV->state_last_count, _cfg->max_retries)) {
+        PR_ERR("在阶段 [%s] 连续重试 %d 次均超时未收到响应，达到重试上限，正在退出！",
+               str_eap_state(PRIV->state), _cfg->max_retries);
+        if (PRIV->state == EAP_STATE_START_SENT) {
+            PR_ERR("【排障指南】未收到来自锐捷认证服务器的应答。可能的原因：\n"
+                   "  1. 路由器 WAN 口网线未插好或指示灯未亮\n"
+                   "  2. 网络接口配置错误（当前配置接口: %s）\n"
+                   "  3. 广播地址模式不匹配，可尝试在 LuCI/命令行配置中更改广播模式（例如 -a 1 私有组播/广播）",
+                   _cfg->ifname ? _cfg->ifname : "未设置");
+        } else if (PRIV->state == EAP_STATE_IDENTITY_SENT) {
+            PR_ERR("【排障指南】已发送用户名但未收到密码挑战请求。可能的原因：\n"
+                   "  1. 账号不存在或后缀格式不正确\n"
+                   "  2. 锐捷服务名称 (Service-Name) 与校园网不一致");
+        } else if (PRIV->state == EAP_STATE_CHALLENGE_SENT) {
+            PR_ERR("【排障指南】已发送密码验证但未收到成功确认。可能的原因：\n"
+                   "  1. 密码错误\n"
+                   "  2. 锐捷版本号 (version-str) 不被服务器支持");
+        }
+        exit(EXIT_FAILURE);
+    }
+
+    PRIV->state_last_count++;
     PR_WARN("在阶段 [%s] 超时 (%d 秒) 未收到服务器响应，正在进行第 %d 次重试...",
             str_eap_state(PRIV->state),
             _cfg->stage_timeout,
-            PRIV->state_last_count + 1);
+            PRIV->state_last_count);
     switch_to_state(PRIV->state, PRIV->last_recv_frame);
     reset_state_watchdog();
 }
@@ -380,37 +403,7 @@ static RESULT trans_to_failure(ETH_EAP_FRAME* frame) {
  * this watchdog in transition function if needed.
  */
 RESULT switch_to_state(EAP_STATE state, ETH_EAP_FRAME* frame) {
-    PROG_CONFIG* _cfg = get_program_config();
-
-    if (PRIV->state == state) {
-        /*
-         * When max_retries > 0, check if we stayed in this state too long.
-         * Setting max_retries <= 0 disables this limit (unlimited retries).
-         */
-        if (_cfg->max_retries > 0) {
-            PRIV->state_last_count++;
-            if (PRIV->state_last_count >= _cfg->max_retries) {
-                PR_ERR("在阶段 [%s] 连续重试 %d 次均超时未收到响应，达到重试上限，正在退出！",
-                       str_eap_state(PRIV->state), _cfg->max_retries);
-                if (PRIV->state == EAP_STATE_START_SENT) {
-                    PR_ERR("【排障指南】未收到来自锐捷认证服务器的应答。可能的原因：\n"
-                           "  1. 路由器 WAN 口网线未插好或指示灯未亮\n"
-                           "  2. 网络接口配置错误（当前配置接口: %s）\n"
-                           "  3. 广播地址模式不匹配，可尝试在 LuCI/命令行配置中更改广播模式（例如 -a 1 私有组播/广播）",
-                           _cfg->ifname ? _cfg->ifname : "未设置");
-                } else if (PRIV->state == EAP_STATE_IDENTITY_SENT) {
-                    PR_ERR("【排障指南】已发送用户名但未收到密码挑战请求。可能的原因：\n"
-                           "  1. 账号不存在或后缀格式不正确\n"
-                           "  2. 锐捷服务名称 (Service-Name) 与校园网不一致");
-                } else if (PRIV->state == EAP_STATE_CHALLENGE_SENT) {
-                    PR_ERR("【排障指南】已发送密码验证但未收到成功确认。可能的原因：\n"
-                           "  1. 密码错误\n"
-                           "  2. 锐捷版本号 (version-str) 不被服务器支持");
-                }
-                exit(EXIT_FAILURE);
-            }
-        }
-    } else {
+    if (PRIV->state != state) {
         /*
          * Reset watchdog before calling trans func
          * in case we need to cancel it there (e.g. after success)
