@@ -20,6 +20,7 @@ typedef struct _state_mach_priv {
     int auth_round; // Current authentication round
     int fail_count;
     int state_alarm_id;
+    int restart_alarm_id;
     uint8_t local_mac[6];
     uint8_t server_mac[6];
     EAP_STATE state;
@@ -63,6 +64,10 @@ static void disable_state_watchdog();
 
 static void eap_state_machine_reset() {
     disable_state_watchdog();
+    if (PRIV->restart_alarm_id > 0) {
+        unschedule_alarm(PRIV->restart_alarm_id);
+        PRIV->restart_alarm_id = 0;
+    }
     free_frame(&PRIV->last_recv_frame);
     PRIV->state_last_count = 0;
     PRIV->state = EAP_STATE_UNKNOWN; // If called by a transition func, this won't take effect
@@ -196,6 +201,11 @@ static RESULT state_mach_process_success(ETH_EAP_FRAME* frame) {
 }
 
 static void restart_auth(void* unused) {
+    PRIV->restart_alarm_id = 0;
+    if (PRIV->state == EAP_STATE_SUCCESS) {
+        PR_INFO("当前已处于认证成功状态，取消预定的重新认证");
+        return;
+    }
     eap_state_machine_reset();
     switch_to_state(EAP_STATE_START_SENT, NULL);
 }
@@ -227,12 +237,16 @@ static const char* str_eap_state(EAP_STATE state) {
 
 static RESULT state_mach_process_failure(ETH_EAP_FRAME* frame) {
     PROG_CONFIG* _cfg = get_program_config();
+    if (PRIV->restart_alarm_id > 0) {
+        unschedule_alarm(PRIV->restart_alarm_id);
+        PRIV->restart_alarm_id = 0;
+    }
     if (PRIV->state == EAP_STATE_SUCCESS) {
         /* Server forced us offline, not auth failing */
         if (_cfg->restart_on_logoff) {
             /* Wait for this state transition to FAILURE finish */
             PR_WARN("认证掉线（服务器发送下线通知），将在 1 秒后自动重新认证……");
-            schedule_alarm(1, restart_auth, NULL);
+            PRIV->restart_alarm_id = schedule_alarm(1, restart_auth, NULL);
         } else {
             PR_ERR("认证掉线（服务器发送下线通知），已配置禁止自动重连，正在退出……");
             exit(EXIT_FAILURE);
@@ -253,7 +267,7 @@ static RESULT state_mach_process_failure(ETH_EAP_FRAME* frame) {
         } else {
             PR_WARN("认证失败 (第 %d 次)，将在 %d 秒后重新发起认证……",
                     PRIV->fail_count, _cfg->wait_after_fail_secs);
-            schedule_alarm(_cfg->wait_after_fail_secs, restart_auth, NULL);
+            PRIV->restart_alarm_id = schedule_alarm(_cfg->wait_after_fail_secs, restart_auth, NULL);
         }
     }
     return SUCCESS;
