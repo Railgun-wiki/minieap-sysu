@@ -266,40 +266,80 @@ static RESULT state_mach_process_failure(ETH_EAP_FRAME* frame) {
  * and switch to next state (to send response)
  */
 void eap_state_machine_recv_handler(ETH_EAP_FRAME* frame) {
-    /* Keep a copy of the frame, since if_impl may not hold it */
+    if (frame == NULL || frame->content == NULL || frame->actual_len < 18) {
+        return;
+    }
+
+    /* 1. Ignore packets sent by ourselves (e.g. from raw socket reflections) */
+    if (memcmp(frame->header->eth_hdr.src_mac, PRIV->local_mac, 6) == 0) {
+        return;
+    }
+
+    /* 2. Ignore packets not destined for us, broadcast, or PAE multicast */
+    static const uint8_t pae_group[6] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x03};
+    static const uint8_t bcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    if (memcmp(frame->header->eth_hdr.dst_mac, PRIV->local_mac, 6) != 0 &&
+        memcmp(frame->header->eth_hdr.dst_mac, pae_group, 6) != 0 &&
+        memcmp(frame->header->eth_hdr.dst_mac, bcast, 6) != 0) {
+        return;
+    }
+
+    /* 3. Supplicant only processes EAP_PACKET frames */
+    EAPOL_TYPE _eapol_type = frame->header->eapol_hdr.type[0];
+    if (_eapol_type != EAP_PACKET) {
+        return;
+    }
+
+    if (frame->actual_len < 22) {
+        return;
+    }
+
+    /* 4. Supplicants only receive REQUEST, SUCCESS, and FAILURE from authenticator.
+     * Ignore RESPONSE packets sent by other clients on the same shared segment. */
+    EAP_CODE _eap_code = frame->header->eap_hdr.code[0];
+    if (_eap_code != EAP_REQUEST && _eap_code != EAP_SUCCESS && _eap_code != EAP_FAILURE) {
+        return;
+    }
+
+    /* Keep a copy of the valid frame, since if_impl may not hold it */
     if (PRIV->last_recv_frame != NULL) {
         free_frame(&PRIV->last_recv_frame);
     }
     PRIV->last_recv_frame = frame_duplicate(frame);
     packet_plugin_on_frame_received(PRIV->last_recv_frame);
 
-    EAPOL_TYPE _eapol_type = frame->header->eapol_hdr.type[0];
-    if (_eapol_type == EAP_PACKET) {
-        /* We don't want to handle other types here */
-        EAP_TYPE _eap_type = frame->header->eap_hdr.type[0];
-        EAP_CODE _eap_code = frame->header->eap_hdr.code[0];
+    EAP_TYPE _eap_type = frame->header->eap_hdr.type[0];
 
-        switch (_eap_code) {
-            case EAP_REQUEST:
-                /*
-                 * Store server's MAC addr, do not use broadcast after.
-                 */
-                memmove(PRIV->server_mac, frame->header->eth_hdr.src_mac, 6);
-                if (_eap_type == IDENTITY) {
-                    switch_to_state(EAP_STATE_IDENTITY_SENT, frame);
-                } else if (_eap_type == MD5_CHALLENGE) {
-                    switch_to_state(EAP_STATE_CHALLENGE_SENT, frame);
+    switch (_eap_code) {
+        case EAP_REQUEST:
+            /*
+             * Store server's MAC addr, do not use broadcast after.
+             */
+            memmove(PRIV->server_mac, frame->header->eth_hdr.src_mac, 6);
+            if (_eap_type == IDENTITY) {
+                if (PRIV->state == EAP_STATE_SUCCESS) {
+                    /*
+                     * Already authenticated. The switch is sending periodic identity check / probe.
+                     * Reply to keep the switch updated, but do NOT enter waiting state or start watchdog
+                     * because no MD5 challenge will follow for an already authenticated session.
+                     */
+                    PR_INFO("收到服务器定期身份查询，已应答身份确认");
+                    state_mach_send_identity_response(frame);
+                    break;
                 }
-                break;
-            case EAP_SUCCESS:
-                switch_to_state(EAP_STATE_SUCCESS, frame);
-                break;
-            case EAP_FAILURE:
-                switch_to_state(EAP_STATE_FAILURE, frame);
-                break;
-            default:
-                break;
-        }
+                switch_to_state(EAP_STATE_IDENTITY_SENT, frame);
+            } else if (_eap_type == MD5_CHALLENGE) {
+                switch_to_state(EAP_STATE_CHALLENGE_SENT, frame);
+            }
+            break;
+        case EAP_SUCCESS:
+            switch_to_state(EAP_STATE_SUCCESS, frame);
+            break;
+        case EAP_FAILURE:
+            switch_to_state(EAP_STATE_FAILURE, frame);
+            break;
+        default:
+            break;
     }
 }
 
